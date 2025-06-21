@@ -4,8 +4,6 @@ Views for accounts app
 from rest_framework import generics, status, permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.views import APIView
-from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import login, logout
 from django.utils import timezone
 from django.db import transaction, models
@@ -1046,3 +1044,22 @@ class EligibleAdminUsersView(generics.ListAPIView):
         ).exclude(
             id__in=AdminProfile.objects.values_list('user_id', flat=True)
         )
+
+
+# Admin Library Applications View
+class AdminLibraryApplicationsView(generics.ListAPIView):
+    """List library access applications for admin's managed library"""
+    serializer_class = UserLibraryAccessSerializer
+    permission_classes = [permissions.IsAuthenticated, IsAdminUser]
+    
+    def get_queryset(self):
+        user = self.request.user
+        
+        # Filter by application status if provided
+        status_filter = self.request.query_params.get('status')
+        queryset = get_user_library_access_queryset(user)
+        
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        return queryset.order_by('-created_at')

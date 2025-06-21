@@ -46,6 +46,7 @@ urlpatterns = [
     path('library-access/', views.UserLibraryAccessListCreateView.as_view(), name='library-access'),
     path('library-access/<uuid:access_id>/approve/', views.UserLibraryAccessApprovalView.as_view(), name='library-access-approval'),
     path('library-access/<uuid:access_id>/reject/', views.UserLibraryAccessRejectionView.as_view(), name='library-access-rejection'),
+    path('library-applications/', views.AdminLibraryApplicationsView.as_view(), name='library-applications'),
     
     # Admin Profile Management
     path('admin-profiles/', views.AdminProfileListView.as_view(), name='admin-profiles'),

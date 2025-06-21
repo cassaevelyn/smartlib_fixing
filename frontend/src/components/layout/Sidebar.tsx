@@ -1,368 +1,265 @@
-import {
-  Drawer,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Divider,
-  Box,
-  Typography,
-  Avatar,
-  Chip,
-  Badge,
-} from '@mui/material'
-import {
-  Dashboard,
-  LocalLibrary,
-  EventSeat,
-  MenuBook,
-  Event,
-  Person,
-  Settings,
-  AdminPanelSettings,
-  Analytics,
-  People,
-  Notifications,
-  CreditCard,
-} from '@mui/icons-material'
-import { useLocation, useNavigate } from 'react-router-dom'
-import { useAuthStore } from '../../stores/authStore'
-import { motion } from 'framer-motion'
-import { useState, useEffect } from 'react'
-import { notificationService } from '../../services/notificationService'
+import React from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { useAuthStore } from '../../stores/authStore';
 
-interface SidebarProps {
-  open: boolean
-  onClose: () => void
-  variant: 'temporary' | 'persistent'
+interface SidebarLinkProps {
+  to: string;
+  icon: string;
+  label: string;
+  active: boolean;
 }
 
-const menuItems = [
-  { text: 'Dashboard', icon: Dashboard, path: '/' },
-  { text: 'Libraries', icon: LocalLibrary, path: '/libraries' },
-  { text: 'Seats', icon: EventSeat, path: '/seats' },
-  { text: 'Books', icon: MenuBook, path: '/books' },
-  { text: 'Events', icon: Event, path: '/events' },
-]
+const SidebarLink: React.FC<SidebarLinkProps> = ({ to, icon, label, active }) => {
+  return (
+    <Link
+      to={to}
+      className={`flex items-center px-4 py-2 rounded-md transition-colors ${
+        active
+          ? 'bg-primary text-primary-foreground'
+          : 'text-gray-700 hover:bg-gray-100'
+      }`}
+    >
+      <i className={`${icon} mr-3`}></i>
+      <span>{label}</span>
+    </Link>
+  );
+};
 
-const userMenuItems = [
-  { text: 'My Libraries', icon: LocalLibrary, path: '/my-libraries' },
-  { text: 'My Bookings', icon: EventSeat, path: '/my-bookings' },
-  { text: 'My Reservations', icon: MenuBook, path: '/my-reservations' },
-  { text: 'My Events', icon: Event, path: '/my-events' },
-  { text: 'Notifications', icon: Notifications, path: '/notifications', badge: true },
-  { text: 'Subscriptions', icon: CreditCard, path: '/subscriptions' },
-  { text: 'Profile', icon: Person, path: '/profile' },
-  { text: 'Settings', icon: Settings, path: '/settings' },
-]
+interface SidebarSectionProps {
+  title: string;
+  children: React.ReactNode;
+}
 
-const superAdminMenuItems = [
-  { text: 'SuperAdmin Dashboard', icon: AdminPanelSettings, path: '/superadmin' },
-  { text: 'Users', icon: People, path: '/superadmin/users' },
-  { text: 'Admins', icon: AdminPanelSettings, path: '/superadmin/admins' },
-  { text: 'Libraries', icon: LocalLibrary, path: '/superadmin/libraries' },
-  { text: 'Library Applications', icon: LocalLibrary, path: '/superadmin/library-applications' },
-  { text: 'Seats', icon: EventSeat, path: '/superadmin/seats' },
-  { text: 'Books', icon: MenuBook, path: '/superadmin/books' },
-  { text: 'Events', icon: Event, path: '/superadmin/events' },
-  { text: 'Analytics', icon: Analytics, path: '/superadmin/analytics' },
-]
+const SidebarSection: React.FC<SidebarSectionProps> = ({ title, children }) => {
+  return (
+    <div className="mb-6">
+      <h3 className="px-4 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+        {title}
+      </h3>
+      <div className="space-y-1">{children}</div>
+    </div>
+  );
+};
 
-// Admin menu items
-const adminMenuItems = [
-  { text: 'Admin Dashboard', icon: AdminPanelSettings, path: '/admin' },
-  { text: 'Manage Library', icon: LocalLibrary, path: '/admin/managed-library' },
-  { text: 'Users', icon: People, path: '/admin/users' },
-]
-
-export function Sidebar({ open, onClose, variant }: SidebarProps) {
-  const location = useLocation()
-  const navigate = useNavigate()
-  const { user } = useAuthStore()
-  const [unreadCount, setUnreadCount] = useState(0)
-
-  useEffect(() => {
-    fetchUnreadCount()
-    
-    // Set up polling for unread count
-    const interval = setInterval(fetchUnreadCount, 60000) // Check every minute
-    
-    return () => clearInterval(interval)
-  }, [])
-
-  const fetchUnreadCount = async () => {
-    try {
-      const response = await notificationService.getUnreadCount()
-      setUnreadCount(response.count)
-    } catch (error) {
-      console.error('Failed to fetch unread count:', error)
-    }
-  }
-
-  const handleNavigation = (path: string) => {
-    navigate(path)
-    if (variant === 'temporary') {
-      onClose()
-    }
-  }
-
-  const isActive = (path: string) => {
-    if (path === '/') {
-      // Only match exactly '/' or '/dashboard'
-      return location.pathname === '/' || location.pathname === '/dashboard'
-    }
-    
-    // For other paths, check if the current path starts with this path
-    // But ensure it's a complete segment match (e.g., '/profile' should not match '/profile-something')
-    // Also ensure that paths like '/superadmin' don't match '/superadmin/users'
-    if (path === '/superadmin' || path === '/admin') {
-      return location.pathname === path
-    }
-    
-    return location.pathname === path || 
-           (location.pathname.startsWith(path) && 
-            (location.pathname.length === path.length || location.pathname[path.length] === '/'))
-  }
-
-  const drawerContent = (
-    <Box sx={{ width: 280, height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* User Profile Section */}
-      <Box sx={{ p: 3, borderBottom: 1, borderColor: 'divider' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <Avatar
-            src={user?.avatar}
-            sx={{ width: 48, height: 48, mr: 2 }}
-          >
-            {user?.first_name?.[0]}{user?.last_name?.[0]}
-          </Avatar>
-          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <Typography variant="subtitle1" noWrap>
-              {user?.full_name}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" noWrap>
-              {user?.email}
-            </Typography>
-          </Box>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Chip
-            label={user?.role?.replace('_', ' ')}
-            size="small"
-            color={user?.role === 'SUPER_ADMIN' ? 'error' : user?.role === 'ADMIN' ? 'warning' : 'primary'}
-            sx={{ fontSize: '0.75rem' }}
-          />
-          {user?.has_active_subscription && (
-            <Chip
-              label="Premium"
-              size="small"
-              color="success"
-              sx={{ fontSize: '0.75rem' }}
-            />
-          )}
-        </Box>
-      </Box>
-
-      {/* Main Navigation */}
-      <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
-        {/* Only show general menu items for students, not for admins */}
-        {user?.role === 'STUDENT' && (
-          <List>
-            {menuItems.map((item) => (
-              <motion.div
-                key={item.path}
-                whileHover={{ x: 4 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              >
-                <ListItem disablePadding>
-                  <ListItemButton
-                    selected={isActive(item.path)}
-                    onClick={() => handleNavigation(item.path)}
-                    sx={{
-                      mx: 1,
-                      borderRadius: 2,
-                      '&.Mui-selected': {
-                        backgroundColor: 'primary.main',
-                        color: 'primary.contrastText',
-                        '&:hover': {
-                          backgroundColor: 'primary.dark',
-                        },
-                        '& .MuiListItemIcon-root': {
-                          color: 'primary.contrastText',
-                        },
-                      },
-                    }}
-                  >
-                    <ListItemIcon>
-                      <item.icon />
-                    </ListItemIcon>
-                    <ListItemText primary={item.text} />
-                  </ListItemButton>
-                </ListItem>
-              </motion.div>
-            ))}
-          </List>
-        )}
-
-        <Divider sx={{ my: 2 }} />
-
-        {/* User Menu */}
-        <Typography variant="overline" sx={{ px: 3, color: 'text.secondary' }}>
-          My Account
-        </Typography>
-        <List>
-          {userMenuItems.map((item) => (
-            <motion.div
-              key={item.path}
-              whileHover={{ x: 4 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            >
-              <ListItem disablePadding>
-                <ListItemButton
-                  selected={isActive(item.path)}
-                  onClick={() => handleNavigation(item.path)}
-                  sx={{
-                    mx: 1,
-                    borderRadius: 2,
-                    '&.Mui-selected': {
-                      backgroundColor: 'primary.main',
-                      color: 'primary.contrastText',
-                      '&:hover': {
-                        backgroundColor: 'primary.dark',
-                      },
-                      '& .MuiListItemIcon-root': {
-                        color: 'primary.contrastText',
-                      },
-                    },
-                  }}
-                >
-                  <ListItemIcon>
-                    {item.badge ? (
-                      <Badge badgeContent={unreadCount} color="error">
-                        <item.icon />
-                      </Badge>
-                    ) : (
-                      <item.icon />
-                    )}
-                  </ListItemIcon>
-                  <ListItemText primary={item.text} />
-                </ListItemButton>
-              </ListItem>
-            </motion.div>
-          ))}
-        </List>
-
-        {/* Admin Menu - Only for regular admins */}
-        {user?.role === 'ADMIN' && (
-          <>
-            <Divider sx={{ my: 2 }} />
-            <Typography variant="overline" sx={{ px: 3, color: 'text.secondary' }}>
-              Administration
-            </Typography>
-            <List>
-              {adminMenuItems.map((item) => (
-                <motion.div
-                  key={item.path}
-                  whileHover={{ x: 4 }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                >
-                  <ListItem disablePadding>
-                    <ListItemButton
-                      selected={isActive(item.path)}
-                      onClick={() => handleNavigation(item.path)}
-                      sx={{
-                        mx: 1,
-                        borderRadius: 2,
-                        '&.Mui-selected': {
-                          backgroundColor: 'primary.main',
-                          color: 'primary.contrastText',
-                          '&:hover': {
-                            backgroundColor: 'primary.dark',
-                          },
-                          '& .MuiListItemIcon-root': {
-                            color: 'primary.contrastText',
-                          },
-                        },
-                      }}
-                    >
-                      <ListItemIcon>
-                        <item.icon />
-                      </ListItemIcon>
-                      <ListItemText primary={item.text} />
-                    </ListItemButton>
-                  </ListItem>
-                </motion.div>
-              ))}
-            </List>
-          </>
-        )}
-
-        {/* SuperAdmin Menu */}
-        {user?.role === 'SUPER_ADMIN' && (
-          <>
-            <Divider sx={{ my: 2 }} />
-            <Typography variant="overline" sx={{ px: 3, color: 'text.secondary' }}>
-              Super Administration
-            </Typography>
-            <List>
-              {superAdminMenuItems.map((item) => (
-                <motion.div
-                  key={item.path}
-                  whileHover={{ x: 4 }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                >
-                  <ListItem disablePadding>
-                    <ListItemButton
-                      selected={isActive(item.path)}
-                      onClick={() => handleNavigation(item.path)}
-                      sx={{
-                        mx: 1,
-                        borderRadius: 2,
-                        '&.Mui-selected': {
-                          backgroundColor: 'primary.main',
-                          color: 'primary.contrastText',
-                          '&:hover': {
-                            backgroundColor: 'primary.dark',
-                          },
-                          '& .MuiListItemIcon-root': {
-                            color: 'primary.contrastText',
-                          },
-                        },
-                      }}
-                    >
-                      <ListItemIcon>
-                        <item.icon />
-                      </ListItemIcon>
-                      <ListItemText primary={item.text} />
-                    </ListItemButton>
-                  </ListItem>
-                </motion.div>
-              ))}
-            </List>
-          </>
-        )}
-      </Box>
-    </Box>
-  )
+const Sidebar: React.FC = () => {
+  const location = useLocation();
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === 'ADMIN';
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
   return (
-    <Drawer
-      variant={variant}
-      open={open}
-      onClose={onClose}
-      ModalProps={{
-        keepMounted: true, // Better open performance on mobile
-      }}
-      sx={{
-        '& .MuiDrawer-paper': {
-          boxSizing: 'border-box',
-          width: 280,
-          borderRight: 1,
-          borderColor: 'divider',
-        },
-      }}
-    >
-      {drawerContent}
-    </Drawer>
-  )
-}
+    <div className="w-64 bg-white border-r border-gray-200 h-full overflow-y-auto">
+      <div className="p-4">
+        <Link to="/dashboard" className="flex items-center">
+          <span className="text-xl font-bold text-primary">Smart Lib</span>
+        </Link>
+      </div>
+
+      <div className="px-2 py-4">
+        <SidebarSection title="Main">
+          <SidebarLink
+            to="/dashboard"
+            icon="fas fa-home"
+            label="Dashboard"
+            active={location.pathname === '/dashboard'}
+          />
+          <SidebarLink
+            to="/libraries"
+            icon="fas fa-building"
+            label="Libraries"
+            active={location.pathname.startsWith('/libraries') && location.pathname !== '/libraries/apply'}
+          />
+          <SidebarLink
+            to="/my-libraries"
+            icon="fas fa-star"
+            label="My Libraries"
+            active={location.pathname === '/my-libraries'}
+          />
+        </SidebarSection>
+
+        <SidebarSection title="Resources">
+          <SidebarLink
+            to="/seats"
+            icon="fas fa-chair"
+            label="Seats"
+            active={location.pathname === '/seats'}
+          />
+          <SidebarLink
+            to="/books"
+            icon="fas fa-book"
+            label="Books"
+            active={location.pathname === '/books'}
+          />
+          <SidebarLink
+            to="/events"
+            icon="fas fa-calendar"
+            label="Events"
+            active={location.pathname === '/events'}
+          />
+        </SidebarSection>
+
+        <SidebarSection title="My Activity">
+          <SidebarLink
+            to="/my-bookings"
+            icon="fas fa-calendar-check"
+            label="My Bookings"
+            active={location.pathname === '/my-bookings'}
+          />
+          <SidebarLink
+            to="/my-reservations"
+            icon="fas fa-bookmark"
+            label="My Reservations"
+            active={location.pathname === '/my-reservations'}
+          />
+          <SidebarLink
+            to="/my-events"
+            icon="fas fa-ticket-alt"
+            label="My Events"
+            active={location.pathname === '/my-events'}
+          />
+        </SidebarSection>
+
+        {isAdmin && (
+          <SidebarSection title="Administration">
+            <SidebarLink
+              to="/admin/dashboard"
+              icon="fas fa-tachometer-alt"
+              label="Admin Dashboard"
+              active={location.pathname === '/admin/dashboard'}
+            />
+            <SidebarLink
+              to="/admin/users"
+              icon="fas fa-users"
+              label="Manage Users"
+              active={location.pathname === '/admin/users'}
+            />
+            <SidebarLink
+              to="/admin/library-applications"
+              icon="fas fa-clipboard-list"
+              label="Library Applications"
+              active={location.pathname === '/admin/library-applications'}
+            />
+            <SidebarLink
+              to="/admin/books"
+              icon="fas fa-book"
+              label="Manage Books"
+              active={location.pathname === '/admin/books'}
+            />
+            <SidebarLink
+              to="/admin/seats"
+              icon="fas fa-chair"
+              label="Manage Seats"
+              active={location.pathname === '/admin/seats'}
+            />
+            <SidebarLink
+              to="/admin/events"
+              icon="fas fa-calendar"
+              label="Manage Events"
+              active={location.pathname === '/admin/events'}
+            />
+            <SidebarLink
+              to="/admin/analytics"
+              icon="fas fa-chart-bar"
+              label="Analytics"
+              active={location.pathname === '/admin/analytics'}
+            />
+            <SidebarLink
+              to="/admin/managed-library"
+              icon="fas fa-cog"
+              label="Library Settings"
+              active={location.pathname === '/admin/managed-library'}
+            />
+          </SidebarSection>
+        )}
+
+        {isSuperAdmin && (
+          <SidebarSection title="Super Admin">
+            <SidebarLink
+              to="/superadmin/dashboard"
+              icon="fas fa-tachometer-alt"
+              label="Admin Dashboard"
+              active={location.pathname === '/superadmin/dashboard'}
+            />
+            <SidebarLink
+              to="/superadmin/users"
+              icon="fas fa-users"
+              label="All Users"
+              active={location.pathname === '/superadmin/users'}
+            />
+            <SidebarLink
+              to="/superadmin/admins"
+              icon="fas fa-user-shield"
+              label="Manage Admins"
+              active={location.pathname === '/superadmin/admins'}
+            />
+            <SidebarLink
+              to="/superadmin/libraries"
+              icon="fas fa-building"
+              label="All Libraries"
+              active={location.pathname === '/superadmin/libraries' && !location.pathname.includes('/library-applications')}
+            />
+            <SidebarLink
+              to="/superadmin/library-applications"
+              icon="fas fa-clipboard-list"
+              label="Library Applications"
+              active={location.pathname === '/superadmin/library-applications'}
+            />
+            <SidebarLink
+              to="/superadmin/books"
+              icon="fas fa-book"
+              label="All Books"
+              active={location.pathname === '/superadmin/books'}
+            />
+            <SidebarLink
+              to="/superadmin/seats"
+              icon="fas fa-chair"
+              label="All Seats"
+              active={location.pathname === '/superadmin/seats'}
+            />
+            <SidebarLink
+              to="/superadmin/events"
+              icon="fas fa-calendar"
+              label="All Events"
+              active={location.pathname === '/superadmin/events'}
+            />
+            <SidebarLink
+              to="/superadmin/analytics"
+              icon="fas fa-chart-bar"
+              label="System Analytics"
+              active={location.pathname === '/superadmin/analytics'}
+            />
+          </SidebarSection>
+        )}
+
+        <SidebarSection title="Account">
+          <SidebarLink
+            to="/profile"
+            icon="fas fa-user"
+            label="My Profile"
+            active={location.pathname === '/profile'}
+          />
+          <SidebarLink
+            to="/settings"
+            icon="fas fa-cog"
+            label="Settings"
+            active={location.pathname === '/settings'}
+          />
+          <SidebarLink
+            to="/subscriptions"
+            icon="fas fa-credit-card"
+            label="Subscriptions"
+            active={location.pathname === '/subscriptions'}
+          />
+          <SidebarLink
+            to="/notifications"
+            icon="fas fa-bell"
+            label="Notifications"
+            active={location.pathname === '/notifications'}
+          />
+        </SidebarSection>
+      </div>
+    </div>
+  );
+};
+
+export default Sidebar;
