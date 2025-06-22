@@ -351,21 +351,30 @@ class UserLibraryAccessSerializer(BaseModelSerializer):
     """Serializer for user library access"""
     user_display = serializers.CharField(source='user.get_full_name', read_only=True)
     library_display = serializers.CharField(source='library.name', read_only=True)
-    granted_by_display = serializers.CharField(source='granted_by.full_name', read_only=True)
-    access_type_display = serializers.CharField(
-        source='get_access_type_display', read_only=True
-    )
+    approved_by_display = serializers.CharField(source='approved_by.get_full_name', read_only=True)
+    rejected_by_display = serializers.CharField(source='rejected_by.get_full_name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    access_type_display = serializers.CharField(source='get_access_type_display', read_only=True)
+    is_active = serializers.ReadOnlyField()
+    is_expired = serializers.ReadOnlyField()
     
     class Meta:
         model = UserLibraryAccess
         fields = [
             'id', 'user', 'user_display', 'library', 'library_display',
-            'access_type', 'access_type_display', 'granted_by',
-            'granted_by_display', 'granted_at', 'expires_at', 'is_active',
-            'notes', 'created_at', 'updated_at'
+            'status', 'status_display', 'access_type', 'access_type_display',
+            'application_date', 'application_reason', 'notes',
+            'approved_by', 'approved_by_display', 'approved_at', 'approval_notes',
+            'rejected_by', 'rejected_by_display', 'rejected_at', 'rejection_reason',
+            'granted_at', 'expires_at', 'is_active', 'is_expired',
+            'total_visits', 'total_bookings', 'last_visit',
+            'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'id', 'granted_by', 'granted_at', 'created_at', 'updated_at'
+            'id', 'application_date', 'approved_by', 'approved_at', 'approval_notes',
+            'rejected_by', 'rejected_at', 'rejection_reason', 'granted_at',
+            'total_visits', 'total_bookings', 'last_visit',
+            'created_at', 'updated_at'
         ]
 
 
@@ -373,37 +382,45 @@ class UserLibraryAccessAdminSerializer(BaseModelSerializer):
     """Serializer for admin management of user library access"""
     user_display = serializers.CharField(source='user.get_full_name', read_only=True)
     library_display = serializers.CharField(source='library.name', read_only=True)
-    granted_by_display = serializers.CharField(source='granted_by.full_name', read_only=True)
-    access_type_display = serializers.CharField(
-        source='get_access_type_display', read_only=True
-    )
+    approved_by_display = serializers.CharField(source='approved_by.get_full_name', read_only=True)
+    rejected_by_display = serializers.CharField(source='rejected_by.get_full_name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    access_type_display = serializers.CharField(source='get_access_type_display', read_only=True)
+    is_active = serializers.ReadOnlyField()
+    is_expired = serializers.ReadOnlyField()
     
     class Meta:
         model = UserLibraryAccess
         fields = [
             'id', 'user', 'user_display', 'library', 'library_display',
-            'access_type', 'access_type_display', 'granted_by',
-            'granted_by_display', 'granted_at', 'expires_at', 'is_active',
-            'notes', 'created_at', 'updated_at'
+            'status', 'status_display', 'access_type', 'access_type_display',
+            'application_date', 'application_reason', 'notes',
+            'approved_by', 'approved_by_display', 'approved_at', 'approval_notes',
+            'rejected_by', 'rejected_by_display', 'rejected_at', 'rejection_reason',
+            'granted_at', 'expires_at', 'is_active', 'is_expired',
+            'total_visits', 'total_bookings', 'last_visit',
+            'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'id', 'user', 'library', 'created_at', 'updated_at'
+            'id', 'user', 'library', 'application_date', 'application_reason',
+            'total_visits', 'total_bookings', 'last_visit',
+            'created_at', 'updated_at'
         ]
 
 
 class LibraryApplicationSerializer(serializers.ModelSerializer):
     """Serializer for library access application"""
-    notes = serializers.CharField(required=False, allow_blank=True)
+    application_reason = serializers.CharField(required=False, allow_blank=True)
     
     class Meta:
         model = UserLibraryAccess
-        fields = ['library', 'notes']
+        fields = ['library', 'application_reason']
     
     def create(self, validated_data):
         user = self.context['request'].user
         validated_data['user'] = user
         validated_data['created_by'] = user
-        validated_data['is_active'] = False  # Pending approval
+        validated_data['status'] = 'PENDING'
         validated_data['access_type'] = 'STANDARD'
         return super().create(validated_data)
 

@@ -618,7 +618,7 @@ class UserLibraryAccessListView(generics.ListAPIView):
     def get_queryset(self):
         return UserLibraryAccess.objects.filter(
             user=self.request.user
-        ).select_related('library', 'granted_by')
+        ).select_related('library', 'approved_by', 'rejected_by')
 
 
 def get_user_library_access_queryset(user):
@@ -629,7 +629,7 @@ def get_user_library_access_queryset(user):
     if user.is_super_admin:
         # Super admins can see all library access records
         return UserLibraryAccess.objects.all().select_related(
-            'user', 'library', 'granted_by'
+            'user', 'library', 'approved_by', 'rejected_by'
         )
     elif user.role == 'ADMIN':
         # Regular admins can only see access records for their managed library
@@ -638,7 +638,7 @@ def get_user_library_access_queryset(user):
             if admin_profile and admin_profile.managed_library:
                 return UserLibraryAccess.objects.filter(
                     library=admin_profile.managed_library
-                ).select_related('user', 'library', 'granted_by')
+                ).select_related('user', 'library', 'approved_by', 'rejected_by')
         except AdminProfile.DoesNotExist:
             pass
     
@@ -656,7 +656,7 @@ class UserLibraryAccessListCreateView(generics.ListCreateAPIView):
     
     def perform_create(self, serializer):
         serializer.save(
-            granted_by=self.request.user,
+            approved_by=self.request.user,
             created_by=self.request.user
         )
 
@@ -674,11 +674,11 @@ class UserLibraryAccessApprovalView(generics.GenericAPIView):
             # Get the library access application
             application = self.get_queryset().get(id=access_id)
             
-            # Update application status
-            application.is_active = True
-            application.granted_by = request.user
-            application.granted_at = timezone.now()
-            application.save()
+            # Get approval notes from request data
+            approval_notes = request.data.get('approval_notes', '')
+            
+            # Approve the application using the model method
+            application.approve(request.user, approval_notes)
             
             # Create notification for the user
             try:
@@ -691,7 +691,7 @@ class UserLibraryAccessApprovalView(generics.GenericAPIView):
                     metadata={
                         'library_id': str(application.library.id),
                         'library_name': application.library.name,
-                        'approved_by': request.user.full_name,
+                        'approved_by': request.user.get_full_name(),
                         'approved_at': timezone.now().isoformat()
                     }
                 )
@@ -704,10 +704,10 @@ class UserLibraryAccessApprovalView(generics.GenericAPIView):
             ActivityLog.objects.create(
                 user=request.user,
                 activity_type='PROFILE_UPDATE',
-                description=f'Approved library access for {application.user.full_name} to {application.library.name}',
+                description=f'Approved library access for {application.user.get_full_name()} to {application.library.name}',
                 metadata={
                     'user_id': str(application.user.id),
-                    'user_name': application.user.full_name,
+                    'user_name': application.user.get_full_name(),
                     'library_id': str(application.library.id),
                     'library_name': application.library.name,
                     'application_id': str(application.id)
@@ -715,7 +715,7 @@ class UserLibraryAccessApprovalView(generics.GenericAPIView):
             )
             
             return Response({
-                'message': f'Library access for {application.user.full_name} to {application.library.name} has been approved.',
+                'message': f'Library access for {application.user.get_full_name()} to {application.library.name} has been approved.',
                 'application': UserLibraryAccessSerializer(application).data
             })
             
@@ -732,7 +732,7 @@ class UserLibraryAccessApprovalView(generics.GenericAPIView):
 
 
 class UserLibraryAccessRejectionView(generics.GenericAPIView):
-    """Reject or revoke a library access application"""
+    """Reject a library access application"""
     serializer_class = UserLibraryAccessAdminSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdminUser]
     
@@ -744,23 +744,11 @@ class UserLibraryAccessRejectionView(generics.GenericAPIView):
             # Get the library access application
             application = self.get_queryset().get(id=access_id)
             
-            # Get reason from request data
-            reason = request.data.get('reason', '')
+            # Get rejection reason from request data
+            rejection_reason = request.data.get('rejection_reason', '')
             
-            # Update application status
-            application.is_active = False
-            
-            # Add rejection note
-            rejection_note = f"\n[REJECTED by {request.user.full_name} on {timezone.now().strftime('%Y-%m-%d %H:%M')}]"
-            if reason:
-                rejection_note += f"\nReason: {reason}"
-                
-            if application.notes:
-                application.notes += rejection_note
-            else:
-                application.notes = rejection_note
-            
-            application.save()
+            # Reject the application using the model method
+            application.reject(request.user, rejection_reason)
             
             # Create notification for the user
             try:
@@ -773,9 +761,9 @@ class UserLibraryAccessRejectionView(generics.GenericAPIView):
                     metadata={
                         'library_id': str(application.library.id),
                         'library_name': application.library.name,
-                        'rejected_by': request.user.full_name,
+                        'rejected_by': request.user.get_full_name(),
                         'rejected_at': timezone.now().isoformat(),
-                        'reason': reason
+                        'rejection_reason': rejection_reason
                     }
                 )
             except Exception as e:
@@ -787,19 +775,19 @@ class UserLibraryAccessRejectionView(generics.GenericAPIView):
             ActivityLog.objects.create(
                 user=request.user,
                 activity_type='PROFILE_UPDATE',
-                description=f'Rejected library access for {application.user.full_name} to {application.library.name}',
+                description=f'Rejected library access for {application.user.get_full_name()} to {application.library.name}',
                 metadata={
                     'user_id': str(application.user.id),
-                    'user_name': application.user.full_name,
+                    'user_name': application.user.get_full_name(),
                     'library_id': str(application.library.id),
                     'library_name': application.library.name,
                     'application_id': str(application.id),
-                    'reason': reason
+                    'rejection_reason': rejection_reason
                 }
             )
             
             return Response({
-                'message': f'Library access for {application.user.full_name} to {application.library.name} has been rejected.',
+                'message': f'Library access for {application.user.get_full_name()} to {application.library.name} has been rejected.',
                 'application': UserLibraryAccessSerializer(application).data
             })
             
@@ -1062,4 +1050,4 @@ class AdminLibraryApplicationsView(generics.ListAPIView):
         if status_filter:
             queryset = queryset.filter(status=status_filter)
         
-        return queryset.order_by('-created_at')
+        return queryset.order_by('-application_date')

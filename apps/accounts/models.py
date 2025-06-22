@@ -302,8 +302,13 @@ class UserLibraryAccess(BaseModel):
         ('PENDING', 'Pending Approval'),
         ('APPROVED', 'Approved'),
         ('REJECTED', 'Rejected'),
-        ('SUSPENDED', 'Suspended'),
-        ('EXPIRED', 'Expired'),
+    ]
+    
+    ACCESS_TYPE_CHOICES = [
+        ('STANDARD', 'Standard Access'),
+        ('EXTENDED', 'Extended Access'),
+        ('PREMIUM', 'Premium Access'),
+        ('RESTRICTED', 'Restricted Access'),
     ]
     
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='library_access')
@@ -313,8 +318,11 @@ class UserLibraryAccess(BaseModel):
     application_date = models.DateTimeField(auto_now_add=True)
     application_reason = models.TextField(blank=True, help_text="Why do you want access to this library?")
     
-    # Status and Approval
+    # Status and Access Type
     status = models.CharField(max_length=15, choices=ACCESS_STATUS_CHOICES, default='PENDING')
+    access_type = models.CharField(max_length=15, choices=ACCESS_TYPE_CHOICES, default='STANDARD')
+    
+    # Approval Information
     approved_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -322,13 +330,23 @@ class UserLibraryAccess(BaseModel):
         blank=True,
         related_name='approved_library_access'
     )
-    approval_date = models.DateTimeField(null=True, blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approval_notes = models.TextField(blank=True)
+    
+    # Rejection Information
+    rejected_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='rejected_library_access'
+    )
+    rejected_at = models.DateTimeField(null=True, blank=True)
     rejection_reason = models.TextField(blank=True)
     
     # Access Details
-    is_active = models.BooleanField(default=False)
-    joined_date = models.DateTimeField(null=True, blank=True)
-    expiry_date = models.DateTimeField(null=True, blank=True)
+    granted_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
     
     # Usage Statistics
     total_visits = models.PositiveIntegerField(default=0)
@@ -336,7 +354,7 @@ class UserLibraryAccess(BaseModel):
     last_visit = models.DateTimeField(null=True, blank=True)
     
     # Notes
-    admin_notes = models.TextField(blank=True)
+    notes = models.TextField(blank=True)
     
     class Meta:
         db_table = 'accounts_user_library_access'
@@ -345,75 +363,60 @@ class UserLibraryAccess(BaseModel):
         indexes = [
             models.Index(fields=['user', 'status']),
             models.Index(fields=['library', 'status']),
-            models.Index(fields=['status', 'is_active']),
+            models.Index(fields=['status']),
+            models.Index(fields=['application_date']),
         ]
     
     def __str__(self):
-        return f"{self.user.get_full_name()} - {self.library.name} ({self.status})"
+        return f"{self.user.get_full_name()} - {self.library.name} ({self.get_status_display()})"
     
-    def save(self, *args, **kwargs):
-        # Auto-set is_active and joined_date when approved
-        if self.status == 'APPROVED':
-            if not self.is_active:
-                self.is_active = True
-            if not self.joined_date:
-                self.joined_date = timezone.now()
-            if not self.approval_date:
-                self.approval_date = timezone.now()
-        else:
-            # If status changes from APPROVED to something else, deactivate
-            if self.pk:  # Only for existing records
-                old_instance = UserLibraryAccess.objects.get(pk=self.pk)
-                if old_instance.status == 'APPROVED' and self.status != 'APPROVED':
-                    self.is_active = False
+    @property
+    def is_active(self):
+        """Check if access is currently active (approved and not expired)"""
+        if self.status != 'APPROVED':
+            return False
         
-        super().save(*args, **kwargs)
-    
-    def approve(self, approved_by_user, admin_notes=""):
-        """Approve the library access application"""
-        self.status = 'APPROVED'
-        self.approved_by = approved_by_user
-        self.approval_date = timezone.now()
-        self.is_active = True
-        self.joined_date = timezone.now()
-        if admin_notes:
-            self.admin_notes = admin_notes
-        self.save()
-    
-    def reject(self, rejected_by_user, rejection_reason="", admin_notes=""):
-        """Reject the library access application"""
-        self.status = 'REJECTED'
-        self.approved_by = rejected_by_user
-        self.approval_date = timezone.now()
-        self.rejection_reason = rejection_reason
-        self.is_active = False
-        if admin_notes:
-            self.admin_notes = admin_notes
-        self.save()
-    
-    def suspend(self, suspended_by_user, admin_notes=""):
-        """Suspend the library access"""
-        self.status = 'SUSPENDED'
-        self.is_active = False
-        if admin_notes:
-            self.admin_notes = admin_notes
-        self.save()
-    
-    def reactivate(self, reactivated_by_user, admin_notes=""):
-        """Reactivate suspended library access"""
-        if self.status == 'SUSPENDED':
-            self.status = 'APPROVED'
-            self.is_active = True
-            if admin_notes:
-                self.admin_notes = admin_notes
-            self.save()
+        if self.expires_at and timezone.now() > self.expires_at:
+            return False
+        
+        return True
     
     @property
     def is_expired(self):
         """Check if access has expired"""
-        if self.expiry_date:
-            return timezone.now() > self.expiry_date
+        if self.expires_at:
+            return timezone.now() > self.expires_at
         return False
+    
+    def approve(self, approved_by_user, approval_notes=""):
+        """Approve the library access application"""
+        self.status = 'APPROVED'
+        self.approved_by = approved_by_user
+        self.approved_at = timezone.now()
+        self.granted_at = timezone.now()
+        self.approval_notes = approval_notes
+        
+        # Clear any previous rejection data
+        self.rejected_by = None
+        self.rejected_at = None
+        self.rejection_reason = ""
+        
+        self.save()
+    
+    def reject(self, rejected_by_user, rejection_reason=""):
+        """Reject the library access application"""
+        self.status = 'REJECTED'
+        self.rejected_by = rejected_by_user
+        self.rejected_at = timezone.now()
+        self.rejection_reason = rejection_reason
+        
+        # Clear any previous approval data
+        self.approved_by = None
+        self.approved_at = None
+        self.granted_at = None
+        self.approval_notes = ""
+        
+        self.save()
     
     def increment_visit(self):
         """Increment visit count"""
